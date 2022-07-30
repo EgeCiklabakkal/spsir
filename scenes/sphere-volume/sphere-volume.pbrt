@@ -1,0 +1,48 @@
+Sampler "halton" "integer pixelsamples" [1]
+	"bool samplepixelcenter" "true"
+
+Film "image" "integer xresolution" [512] "integer yresolution" [512] "string filename" "sphere-volume.exr"
+Accelerator "bvh" 
+"string splitmethod" "sah"
+"integer maxnodeprims" [4]
+
+MakeNamedMedium "mymedium" 
+	"string type" "homogeneousblocking" 
+	"rgb sigma_s" [0.1 0.1 0.1]
+	"rgb sigma_a" [0.0 0.0 0.0]
+	"float g" 0.0
+#    "string samplestrategy" [ "risbidirectional" ]
+    "string samplestrategy" [ "risreservoir" ]
+    "integer M" [ 32 ]
+    "integer N" [ 8 ]
+
+Integrator "volpath"
+    "integer maxdepth" [ 1 ]
+    "string listrategy" [ "lightdriven" ]
+    "string lightsamplestrategy" [ "power" ]
+    "string mask" [ "mask/mask_d2.mask" ]
+    "integer maskoffsetseed" [ 0 ]
+
+Scale -1 1 1 #avoid the 'flipped image' bug..
+LookAt	0.0 0.0 5.039999961853027
+	0.0 0.0 4.039999961853027
+	0.0 1.0 0.0
+
+Camera "perspective"
+"float fov" [39.597755335771296]
+
+WorldBegin
+	MediumInterface "" "mymedium"
+
+	AttributeBegin
+		Translate	0.0 0.0 0.0
+		LightSource "point"
+		"rgb I" [33.0 63.0 10.0]
+	AttributeEnd
+	AttributeBegin
+		Transform [-0.268008 0.233703 0.082350 0.000000 -0.009687 0.111331 -0.347474 0.000000 -0.247598 -0.257323 -0.075544 0.000000 0.000000 0.000000 0.000000 1.000000 ]
+		Shape "plymesh" "string filename" ["meshes/00001/Sphere_mat0.ply"]
+	AttributeEnd
+	
+
+WorldEnd

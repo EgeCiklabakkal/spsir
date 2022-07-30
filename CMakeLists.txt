@@ -370,6 +370,7 @@ SET ( PBRT_CORE_SOURCE
   src/core/api.cpp
   src/core/bssrdf.cpp
   src/core/camera.cpp
+  src/core/dithermask.cpp
   src/core/efloat.cpp
   src/core/error.cpp
   src/core/fileutil.cpp
@@ -377,6 +378,7 @@ SET ( PBRT_CORE_SOURCE
   src/core/filter.cpp
   src/core/floatfile.cpp
   src/core/geometry.cpp
+  src/core/hilbertcurve.cpp
   src/core/imageio.cpp
   src/core/integrator.cpp
   src/core/interaction.cpp
@@ -410,6 +412,7 @@ SET ( PBRT_CORE_HEADERS
   src/core/api.h
   src/core/bssrdf.h
   src/core/camera.h
+  src/core/dithermask.h
   src/core/efloat.h
   src/core/error.h
   src/core/fileutil.h
@@ -417,6 +420,7 @@ SET ( PBRT_CORE_HEADERS
   src/core/filter.h
   src/core/floatfile.h
   src/core/geometry.h
+  src/core/hilbertcurve.h
   src/core/imageio.h
   src/core/integrator.h
   src/core/interaction.h
@@ -436,6 +440,7 @@ SET ( PBRT_CORE_HEADERS
   src/core/progressreporter.h
   src/core/quaternion.h
   src/core/reflection.h
+  src/core/reservoir.h
   src/core/rng.h
   src/core/sampler.h
   src/core/sampling.h

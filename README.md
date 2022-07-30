@@ -1,132 +1,156 @@
-pbrt, Version 3
-===============
+Single-pass stratified importance resampling
+============================================
 
-[![Build Status](https://travis-ci.org/mmp/pbrt-v3.svg?branch=master)](https://travis-ci.org/mmp/pbrt-v3)
-[![Build status](https://ci.appveyor.com/api/projects/status/mlm9g91ejxlcn67s/branch/master?svg=true)](https://ci.appveyor.com/project/mmp/pbrt-v3/branch/master)
+Implementation of our paper
+["*Single-pass stratified importance resampling*"](https://diglib.eg.org/handle/10.1111/cgf14585) by
+[Ege Ciklabakkal](https://cs.uwaterloo.ca/~meciklab/),
+[Adrien Gruson](https://profs.etsmtl.ca/agruson/),
+[Iliyan Georgiev](http://iliyan.com/),
+[Derek Nowrouzezahrai](http://www.cim.mcgill.ca/~derek/), and
+[Toshiya Hachisuka](https://cs.uwaterloo.ca/~thachisu/).
 
-This repository holds the source code to the version of pbrt that is
-described in the third edition of *Physically Based Rendering: From
-Theory to Implementation*, by [Matt Pharr](http://pharr.org/matt), [Wenzel
-Jakob](http://www.mitsuba-renderer.org/~wenzel/), and Greg Humphreys.  As
-before, the code is available under the BSD license.
+The implementation builds on the [pbrt, version 3](https://github.com/mmp/pbrt-v3)
+renderer.
+The project can be built in [the same way as pbrt](https://github.com/mmp/pbrt-v3/blob/master/README.md).
 
-The [pbrt website](http://pbrt.org) has general information about both the
-*Physically Based Rendering* book as well as many other resources for pbrt.
-As of October 2018, the full [text of the book](http://www.pbr-book.org) is
-now available online, for free.
+For further details, we refer to the
+[project webpage](http://iliyan.com/publications/StratifiedResampling).
 
-Example scenes
+Building Spsir
 --------------
-
-Over 8GB of example scenes are available for download. (Many are new and
-weren't available with previous versions of pbrt.)  See the [pbrt-v3 scenes
-page](http://pbrt.org/scenes-v3.html) on the pbrt website for information
-about how to download them.
-
-After downloading them, see the `README.md.html` file in the scene
-distribution for more information about the scenes and preview images.
-
-Additional resources
---------------------
-
-* There is a [pbrt Google
-  Groups](https://groups.google.com/forum/#!forum/pbrt) mailing list that can
-  be a helpful resource.
-* Please see the [User's Guide](http://pbrt.org/users-guide.html) for more
-  information about how to check out and build the system as well as various
-  additional information about working with pbrt.
-* Should you find a bug in pbrt, please report it in the [bug
-  tracker](https://github.com/mmp/pbrt-v3/issues).
-* Please report any errors you find in the *Physically Based Rendering*
-  book to authors@pbrt.org.
-
-Note: we tend to let bug reports and book errata emails pile up for a few
-months for processing them in batches. Don't think we don't appreciate
-them. :-)
-
-Building pbrt
--------------
-
-To check out pbrt together with all dependencies, be sure to use the
-`--recursive` flag when cloning the repository, i.e.
+Built [the same way as pbrt](https://github.com/mmp/pbrt-v3/blob/master/README.md).
 ```bash
-$ git clone --recursive https://github.com/mmp/pbrt-v3/
-```
-If you accidentally already cloned pbrt without this flag (or to update an
-pbrt source tree after a new submodule has been added, run the following
-command to also fetch the dependencies:
-```bash
-$ git submodule update --init --recursive
+$ git clone --recursive git@github.com:EgeCiklabakkal/spsir.git
+$ cd spsir
+$ mkdir build
+$ cd build
+$ cmake ..
+$ make -j8
 ```
 
-pbrt uses [cmake](http://www.cmake.org/) for its build system.  On Linux
-and OS X, cmake is available via most package management systems.  To get
-cmake for Windows, or to build it from source, see the [cmake downloads
-page](http://www.cmake.org/download/).  Once you have cmake, the next step
-depends on your operating system.
+Scenes
+------
+We include the scenes used to generate the renderings in the paper.
+For further details on the scenes we refer to [README](scenes/README.md).
 
-### Makefile builds (Linux, other Unixes, and Mac) ###
+Note that in all scenes, ray per pixel is set to 1 and
+these primary rays go through the center of the pixels.
+We do so to focus on the variance (reduction) from
+[resampled importance sampling (RIS)](https://scholarsarchive.byu.edu/cgi/viewcontent.cgi?article=1662&context=etd).
+Our method can be extended to multiple sample per pixel by using a low-discrepancy
+sequence to sample the primary rays and querying the blue-noise mask with
+independent offsets. [Previous work](https://developer.nvidia.com/blog/rendering-in-real-time-with-spatiotemporal-blue-noise-textures-part-2/) has found that the
+[R<sub>2</sub>-sequence](http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/) is a good choice for such offset.
 
-Create a new directory for the build, change to that directory, and run
-`cmake [path to pbrt-v3]`. A Makefile will be created in the current
-directory.  Next, run `make` to build pbrt, the obj2pbrt and imgtool
-utilities, and an executable that runs pbrt's unit tests.  Depending on the
-number of cores in your system, you will probably want to supply make with
-the `-j` parameter to specify the number of compilation jobs to run in
-parallel (e.g. `make -j8`).
+To reproduce the exact figures, some modifications to the code would be necessary
+(For example, fig. 6 reorders the candidates after they are generated,
+which is not our exact algorithm), however our main method is implemented to cover
+each sampling problem we present in the paper.
 
-By default, the makefiles that are created that will compile an optimized
-release build of pbrt. These builds give the highest performance when
-rendering, but many runtime checks are disabled in these builds and
-optimized builds are generally difficult to trace in a debugger.
+Code Organization
+-----------------
+The following is the list of changed / new files for our method:
 
-To build a debug version of pbrt, set the `CMAKE_BUILD_TYPE` flag to
-`Debug` when you run cmake to create build files to make a debug build.  To
-do so, provide cmake with the argument `-DCMAKE_BUILD_TYPE=Debug` and build
-pbrt using the resulting makefiles. (You may want to keep two build
-directories, one for release builds and one for debug builds, so that you
-don't need to switch back and forth.)
+#### 1. `src/core/api.cpp`
+Parse and make medium `HomogeneousBlockingMedium`
 
-Debug versions of the system run much more slowly than release
-builds. Therefore, in order to avoid surprisingly slow renders when
-debugging support isn't desired, debug versions of pbrt print a banner
-message indicating that they were built for debugging at startup time.
+#### 2. `src/core/dithermask.*`
+Class for `DitherMask` of any dimension.
+Should be used with dither masks created by
+[Dithering Mask Generator](https://github.com/beltegeuse/dithering-mask)
 
-### Xcode ###
+#### 3. `src/core/hilbertcurve.*`
+Class for `HilbertCurve` of any dimension.
+The main interface is the `sample` function which returns the
+primary sample space candidate (all components in \[0,1\)) along the
+Hilbert Curve, given a random number `u`.
+There is also the simpler 2D version `HilbertCurve2D` for better performance.
 
-To make an Xcode project on OS X, run `cmake -G Xcode [path to pbrt-v3]`.
-A `PBRT-V3.xcodeproj` project file that can be opened in Xcode.  Note that
-the default build settings have an optimization level of "None"; you'll
-almost certainly want to choose "Faster" or "Fastest".
+#### 4. `src/core/integrator.*`
+Includes many functions implementing our method.
 
-### MSVC on Windows ###
+`[Reservoir,InverseCDF,BidirectionalCDF]LightOnly(...)` functions implement
+[RIS](https://scholarsarchive.byu.edu/cgi/viewcontent.cgi?article=1662&context=etd)
+with 2D candidates of light samples,
+using reservoir sampling, inverse CDF sampling, and
+our bidirectional CDF sampling respectively.
+Reservoir sampling doesn't utilize our Hilbert Curve reordering and instead
+uses low-discrepancy sequences
+(this is also the case for other sampling problems).
+It serves as a reasonable baseline.
+The other methods do utilize the Hilbert Curve reordering.
 
-On Windows, first point the cmake GUI at the directory with pbrt's source
-code.  Create a separate directory to hold the result of the build
-(potentially just a directory named "build" inside the pbrt-v3 directory)
-and set that for "Where to build the binaries" in the GUI.
+`[Reservoir,InverseCDF,BidirectionalCDF]BSDFEnvMIS(...)` functions implement
+RIS with candidates generated by sampling either the BSDF or the environment light.
+The candidates are then weighted by
+[multiple importance sampling (MIS)](http://graphics.stanford.edu/papers/veach_thesis/thesis.pdf).
+This weighting is the same as
+*Sec. 4.6.1 Multiple Importance Sampling applied to Proposals* from
+[Talbot's thesis](https://scholarsarchive.byu.edu/cgi/viewcontent.cgi?article=1662&context=etd)
+These functions assume that there is only the environment map as the light.
+Our goal here is to show that we can combine our method with MIS.
 
-Next, click "Configure".  Note that you will want to choose the "Win64"
-generator for your MSVC installation unless you have a clear reason to need
-a 32-bit build of pbrt.  Once cmake has finished the configuration step,
-click "Generate"; when that's done, there will be a "PBRT-V3.sln" file in
-the build directory you specified. Open that up in MSVC and you're ready to
-go.
+There are also functions related to volume sampling.
 
-### Build Configurations ###
+#### 5. `src/core/light.*`
+Virtual method so sample light and return pdf in area measure
+(instead of solid angle measure).
 
-There are two configuration settings that must be set when configuring the
-build. The first controls whether pbrt uses 32-bit or 64-bit values for
-floating-point computation, and the second controls whether tristimulus RGB
-values or sampled spectral values are used for rendering.  (Both of these
-aren't amenable to being chosen at runtime, but must be determined at
-compile time for efficiency).  The cmake configuration variables
-`PBRT_FLOAT_AS_DOUBLE` and `PBRT_SAMPLED_SPECTRUM` configure them,
-respectively.
+#### 6. `src/core/medium.h`
+`enum class` of volume sampling strategies
+`RISReservoir, RISInverseCDF, RISBidirectionalCDF`
+along virtual methods for our volume sampling experiments.
 
-If you're using a GUI version of cmake, those settings should be available
-in the list of configuration variables; set them as desired before choosing
-'Generate'.
+#### 7. `src/core/reservoir.h`
+Implements the `Reservoir` class, also includes the classes for candidates.
 
-With command-line cmake, their values can be specified when you cmake via
-`-DPBRT_FLOAT_AS_DOUBLE=1`, for example.
+#### 8. `src/core/sampler.*`
+Implements the [R<sub>2</sub>-sequence](http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/) to offset the `DitherMask`.
+This offset is controlled by a seed provided by the user.
+Different offsets can be used to generate multiple outputs to be averaged.
+
+#### 9. `src/core/shape.*`
+Virtual method to help return area measure when sampling lights.
+
+#### 10. `src/integrators/directlighting.*` and `src/integrators/volpath.*`
+Integrator modified to read variables needed for our methods and call them appropriately.
+
+#### 11. `src/lights/diffuse.*` and `src/lights/point.*`
+Sample lights and return pdf in area measure.
+
+#### 12. `src/media/homogeneousblocking.*`
+Implements the `HomogeneousBlockingMedium` that represents the volume such that
+the ray inside it always samples a medium interaction.
+In other words, the objects inside the medium are never shaded,
+but they affect the maximum distance if the ray.
+Therefore we can *see* the objects in a way, however they are not shaded.
+This medium allows us to focus only on sampling a distance along the ray.
+In our experiments, the volume always exists throughout the whole scene
+(it is not confined in an object).
+
+For the first experiment, we consider a single point light inside the
+homogeneous medium and single scattering as the sampling problem
+(i.e. sampling distance along primary rays).
+The relevant method is `SampleLightDriven(...)`
+(samples according to the given light) which calls
+`SampleRIS[Reservoir,iCDF,Bidirectional]LightDriven(...)` similarly to our
+2D direct lighting experiments.
+
+For the second experiment, our goal is to sample distance along the ray and
+a direction to some (area) light so that our candidates are 3D.
+The relevant method is `SampleDistDir(...)` which calls
+`SampleRIS[Reservoir,iCDF,Bidirectional]DistDir(...)`.
+
+How to cite
+-----------
+
+```
+@article{Ciklabakkal:2022:StratifiedResampling,
+  author = {Ege Ciklabakkal and Adrien Gruson and Iliyan Georgiev and Derek Nowrouzezahrai and Toshiya Hachisuka},
+  title = {Single-pass stratified importance resampling},
+  journal = {Computer Graphics Forum (Proceedings of EGSR)},
+  year = {2022},
+  number = {4},
+  volume = {41}
+}
+```

@@ -56,6 +56,8 @@ class PointLight : public Light {
           I(I) {}
     Spectrum Sample_Li(const Interaction &ref, const Point2f &u, Vector3f *wi,
                        Float *pdf, VisibilityTester *vis) const;
+    Spectrum Sample_Li_Area(const Interaction &ref, const Point2f &u, Vector3f *wi,
+                       Float *pdf, VisibilityTester *vis, Interaction *ipLight) const;
     Spectrum Power() const;
     Float Pdf_Li(const Interaction &, const Vector3f &) const;
     Spectrum Sample_Le(const Point2f &u1, const Point2f &u2, Float time,
@@ -63,6 +65,7 @@ class PointLight : public Light {
                        Float *pdfDir) const;
     void Pdf_Le(const Ray &, const Normal3f &, Float *pdfPos,
                 Float *pdfDir) const;
+    Point3f GetPoint() { return pLight; }
 
   private:
     // PointLight Private Data

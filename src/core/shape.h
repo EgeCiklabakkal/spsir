@@ -73,6 +73,9 @@ class Shape {
     // return the PDF with respect to solid angle from |ref|.
     virtual Interaction Sample(const Interaction &ref, const Point2f &u,
                                Float *pdf) const;
+    // return the PDF with respect to area measure
+    virtual Interaction Sample_Area(const Interaction &ref, const Point2f &u,
+                               Float *pdf) const;
     virtual Float Pdf(const Interaction &ref, const Vector3f &wi) const;
 
     // Returns the solid angle subtended by the shape w.r.t. the reference

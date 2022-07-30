@@ -46,6 +46,10 @@
 
 namespace pbrt {
 
+// R2 sequence from
+// http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
+Point2f R2Sample(int n, Float seed = 0);
+
 // Sampler Declarations
 class Sampler {
   public:
@@ -56,6 +60,7 @@ class Sampler {
     virtual Float Get1D() = 0;
     virtual Point2f Get2D() = 0;
     CameraSample GetCameraSample(const Point2i &pRaster);
+    CameraSample GetCameraSampleSimple(const Point2i &pRaster, bool pixelcenter = false);
     void Request1DArray(int n);
     void Request2DArray(int n);
     virtual int RoundCount(int n) const { return n; }
@@ -69,6 +74,7 @@ class Sampler {
                           currentPixel.y, currentPixelSampleIndex);
     }
     int64_t CurrentSampleNumber() const { return currentPixelSampleIndex; }
+    Point2i GetCurrentPixel() const { return currentPixel; }
 
     // Sampler Public Data
     const int64_t samplesPerPixel;

@@ -52,6 +52,17 @@ Spectrum PointLight::Sample_Li(const Interaction &ref, const Point2f &u,
     return I / DistanceSquared(pLight, ref.p);
 }
 
+Spectrum PointLight::Sample_Li_Area(const Interaction &ref, const Point2f &u,
+                               Vector3f *wi, Float *pdf,
+                               VisibilityTester *vis, Interaction *ipLight) const {
+    ProfilePhase _(Prof::LightSample);
+    *wi = Normalize(pLight - ref.p);
+    *pdf = 1.f;
+    *ipLight = Interaction(pLight, ref.time, mediumInterface);
+    *vis = VisibilityTester(ref, *ipLight);
+    return I;
+}
+
 Spectrum PointLight::Power() const { return 4 * Pi * I; }
 
 Float PointLight::Pdf_Li(const Interaction &, const Vector3f &) const {

@@ -42,11 +42,24 @@
 #include "pbrt.h"
 #include "integrator.h"
 #include "scene.h"
+#include "lightdistrib.h"
+#include "reservoir.h"
+#include "dithermask.h"
 
 namespace pbrt {
 
 // LightStrategy Declarations
-enum class LightStrategy { UniformSampleAll, UniformSampleOne };
+enum class LightStrategy { 
+    UniformSampleAll,
+    UniformSampleOne,
+    LightOnly,  // Direct lighting with light sampling only
+    BSDFEnvMIS  // Direct lighting with MIS inside Env. map
+};
+
+// RISStrategy Declerations
+enum class RISStrategy { Reservoir,
+                         InverseCDF,
+                         BidirectionalCDF };
 
 // DirectLightingIntegrator Declarations
 class DirectLightingIntegrator : public SamplerIntegrator {
@@ -55,10 +68,18 @@ class DirectLightingIntegrator : public SamplerIntegrator {
     DirectLightingIntegrator(LightStrategy strategy, int maxDepth,
                              std::shared_ptr<const Camera> camera,
                              std::shared_ptr<Sampler> sampler,
-                             const Bounds2i &pixelBounds)
+                             const Bounds2i &pixelBounds,
+                             int M, int N,
+                             RISStrategy risStrategy,
+                             const std::shared_ptr<DitherMask> ditherMask,
+                             const std::string &lightSampleStrategy)
         : SamplerIntegrator(camera, sampler, pixelBounds),
           strategy(strategy),
-          maxDepth(maxDepth) {}
+          maxDepth(maxDepth),
+          M(M), N(N),
+          risStrategy(risStrategy),
+          ditherMask(ditherMask),
+          lightSampleStrategy(lightSampleStrategy) {}
     Spectrum Li(const RayDifferential &ray, const Scene &scene,
                 Sampler &sampler, MemoryArena &arena, int depth) const;
     void Preprocess(const Scene &scene, Sampler &sampler);
@@ -66,8 +87,14 @@ class DirectLightingIntegrator : public SamplerIntegrator {
   private:
     // DirectLightingIntegrator Private Data
     const LightStrategy strategy;
+    const RISStrategy risStrategy;
     const int maxDepth;
     std::vector<int> nLightSamples;
+    const int M; // # of candidates
+    const int N; // # of final samples
+    const std::shared_ptr<DitherMask> ditherMask;
+    const std::string lightSampleStrategy;
+    std::shared_ptr<LightDistribution> lightDistribution;
 };
 
 DirectLightingIntegrator *CreateDirectLightingIntegrator(

@@ -69,6 +69,19 @@ Interaction Shape::Sample(const Interaction &ref, const Point2f &u,
     return intr;
 }
 
+Interaction Shape::Sample_Area(const Interaction &ref, const Point2f &u,
+                          Float *pdf) const {
+    Interaction intr = Sample(u, pdf);
+    Vector3f wi = intr.p - ref.p;
+    if (wi.LengthSquared() == 0)
+        *pdf = 0;
+    else {
+        wi = Normalize(wi);
+        if (std::isinf(*pdf)) *pdf = 0.f;
+    }
+    return intr;
+}
+
 Float Shape::Pdf(const Interaction &ref, const Vector3f &wi) const {
     // Intersect sample ray with area light geometry
     Ray ray = ref.SpawnRay(wi);

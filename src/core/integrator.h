@@ -46,6 +46,9 @@
 #include "reflection.h"
 #include "sampler.h"
 #include "material.h"
+#include "reservoir.h"
+#include "dithermask.h"
+#include "lowdiscrepancy.h"
 
 namespace pbrt {
 
@@ -65,11 +68,134 @@ Spectrum UniformSampleOneLight(const Interaction &it, const Scene &scene,
                                MemoryArena &arena, Sampler &sampler,
                                bool handleMedia = false,
                                const Distribution1D *lightDistrib = nullptr);
+
+// RIS with reservoir sampling + QMC + blue-noise
+Spectrum ReservoirLightOnly(const Interaction &it, const Scene &scene,
+                            MemoryArena &arena, Sampler &sampler, int M,
+                            const std::shared_ptr<DitherMask> &ditherMask,
+                            int N = 1, bool handleMedia = false,
+                            const Distribution1D *lightDistrib = nullptr);
+
+// RIS with inverse cdf sampling + Hilbert curve candidates + blue-noise
+Spectrum InverseCDFLightOnly(const Interaction &it, const Scene &scene,
+                            MemoryArena &arena, Sampler &sampler, int M,
+                            const std::shared_ptr<DitherMask> &ditherMask,
+                            int N = 1, bool handleMedia = false,
+                            const Distribution1D *lightDistrib = nullptr);
+
+// RIS with bidir. cdf sampling + Hilbert curve candidates + blue-noise
+Spectrum BidirectionalCDFLightOnly(const Interaction &it, const Scene &scene,
+                            MemoryArena &arena, Sampler &sampler, int M,
+                            const std::shared_ptr<DitherMask> &ditherMask,
+                            Float offset, Float u, int N = 1, int n = 0,
+                            bool handleMedia = false,
+                            const Distribution1D *lightDistrib = nullptr);
+
+// RIS + MIS with reservoir sampling + QMC + blue-noise
+Spectrum ReservoirBSDFEnvMIS(const Interaction &it, const Scene &scene,
+                               MemoryArena &arena, Sampler &sampler, int M,
+                               const std::shared_ptr<DitherMask> &ditherMask,
+                               int N = 1, bool handleMedia = false,
+                               const Distribution1D *lightDistrib = nullptr);
+
+// RIS + MIS with inverse cdf sampling + Hilbert curve candidates + blue-noise
+Spectrum InverseCDFBSDFEnvMIS(const Interaction &it, const Scene &scene,
+                               MemoryArena &arena, Sampler &sampler, int M,
+                               const std::shared_ptr<DitherMask> &ditherMask,
+                               int N = 1, bool handleMedia = false,
+                               const Distribution1D *lightDistrib = nullptr);
+
+// RIS + MIS with bidir. cdf sampling + Hilbert curve candidates + blue-noise
+Spectrum BidirectionalBSDFEnvMIS(const Interaction &it, const Scene &scene,
+                               MemoryArena &arena, Sampler &sampler, int M,
+                               const std::shared_ptr<DitherMask> &ditherMask,
+                               Float offset, Float u, int N = 1, int i = 0,
+                               bool handleMedia = false,
+                               const Distribution1D *lightDistrib = nullptr);
+
+// Select a light with random 'u', then rescale it
+int ChooseLight(Float u, Float &pdf, int nLights,
+                const Distribution1D *lightDistrib = nullptr,
+                Float *uRemapped = nullptr);
+
+// Invert CDF using bisection method
+int BisectInvert(std::vector<Float> cdf, Float u);
+
+// Calculate unshadowed contribution and candidate weight
+Float ComputeCandidateWeight(const Interaction &it, const Light &light,
+                                const Point2f &uLight, Float lightChoicePdf,
+                                Float *targetPdf, Float *candidatePdf,
+                                bool specular = false);
+
+// Sample distance distributed according to transmittance
+Float DistanceSampling(Float u, const Ray &ray,
+                       const Spectrum &sigma_t, Float dMax);
+
+// Pdf of distance sampling
+Float DistancePdf(const Spectrum &Tr, const Spectrum &sigma_t, Float dMax);
+
+// Calculate unshadowed contribution inside volume
+// Both functions essentially compute the same value
+//  they have small differences in variables being used
+//  ideally they should be unified
+Float TargetFunctionVolume(const Ray &ray, Float t, const MediumInteraction &mi,
+                            const Spectrum &sigma_t, const Light &light,
+                            const Point2f &uLight, Sampler &sampler,
+                            const Shape *shape);
+Float UnshadowedContributionVolume(Spectrum *f, Float *G,
+                                   const MediumInteraction &mi,
+                                   const Vector3f &wi,
+                                   const Spectrum &sigma_t,
+                                   const std::shared_ptr<Light> &light,
+                                   Spectrum *Tr, const Interaction &pLight,
+                                   Float sourcePdf, const Spectrum &Li);
+
+// Sample a point on a light with pdf in area measure
+Spectrum AreaSampleOneLight(Point2f uLight, const Scene &scene,
+                            int nLights, std::shared_ptr<Light> &light,
+                            const MediumInteraction &mi,
+                            Float *lightPdf, Float &lightChoicePdf,
+                            Vector3f *wi, Interaction *pLight,
+                            VisibilityTester *visibility,
+                            const Distribution1D *lightDistrib);
+
+// Calculate unshadowed contribution for wi sampled by BSDF in env. map
+Float ComputeCandidateWeightBSDFMIS(const Interaction &it,
+                        const Point2f &uShading, const Light &light,
+                        const Scene &scene, Sampler &sampler,
+                        Float *targetPdf, Float *candidatePdf,
+                        Vector3f *sampledwi, int M, int mi,
+                        MemoryArena &arena, bool handleMedia = false,
+                        bool specular = false);
+
+// Calculate unshadowed contribution for wi sampled by env. map
+Float ComputeCandidateWeightLightMIS(const Interaction &it,
+                        const Point2f &uLight, const Light &light,
+                        const Scene &scene, Sampler &sampler,
+                        Float *targetPdf, Float *candidatePdf,
+                        Vector3f *sampledwi, int M, int mi,
+                        MemoryArena &arena, bool handleMedia = false,
+                        bool specular = false);
+
 Spectrum EstimateDirect(const Interaction &it, const Point2f &uShading,
                         const Light &light, const Point2f &uLight,
                         const Scene &scene, Sampler &sampler,
                         MemoryArena &arena, bool handleMedia = false,
                         bool specular = false);
+
+// pbrt's EstimateDirect with light sampling only (no BSDF MIS)
+Spectrum EstimateDirectLightOnly(const Interaction &it, const Light &light,
+                        const Point2f &uLight, const Scene &scene,
+                        Sampler &sampler,
+                        bool handleMedia = false, bool specular = false);
+
+// pbrt's EstimateDirect with a given direction 'wi'
+Spectrum EstimateDirectWi(const Interaction &it, const Vector3f &wi,
+                        const Light &light, const Scene &scene,
+                        Sampler &sampler, MemoryArena &arena,
+                        bool handleMedia = false,
+                        bool specular = false);
+
 std::unique_ptr<Distribution1D> ComputeLightPowerDistribution(
     const Scene &scene);
 
@@ -94,6 +220,8 @@ class SamplerIntegrator : public Integrator {
                               const SurfaceInteraction &isect,
                               const Scene &scene, Sampler &sampler,
                               MemoryArena &arena, int depth) const;
+    Bounds2i GetPixelBounds() const { return pixelBounds; }
+    std::shared_ptr<Sampler> GetSampler() const { return sampler; }
 
   protected:
     // SamplerIntegrator Protected Data

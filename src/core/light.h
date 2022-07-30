@@ -68,6 +68,10 @@ class Light {
     virtual Spectrum Sample_Li(const Interaction &ref, const Point2f &u,
                                Vector3f *wi, Float *pdf,
                                VisibilityTester *vis) const = 0;
+    // Same as pbrt's Sample_Li but return pdf in area measure
+    virtual Spectrum Sample_Li_Area(const Interaction &ref, const Point2f &u,
+                               Vector3f *wi, Float *pdf,
+                               VisibilityTester *vis, Interaction *pLight) const;
     virtual Spectrum Power() const = 0;
     virtual void Preprocess(const Scene &scene) {}
     virtual Spectrum Le(const RayDifferential &r) const;

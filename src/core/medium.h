@@ -42,9 +42,16 @@
 #include "pbrt.h"
 #include "geometry.h"
 #include "spectrum.h"
+#include "dithermask.h"
 #include <memory>
 
 namespace pbrt {
+
+// Sampling strategies
+enum class VolSampleStrategy { Transmittance,
+                               RISReservoir,
+                               RISInverseCDF,
+                               RISBidirectionalCDF };
 
 // Media Declarations
 class PhaseFunction {
@@ -80,6 +87,21 @@ class Medium {
     virtual Spectrum Sample(const Ray &ray, Sampler &sampler,
                             MemoryArena &arena,
                             MediumInteraction *mi) const = 0;
+    virtual Spectrum SampleLightDriven(
+                const Scene &scene, const Ray &ray, Sampler &sampler,
+                MemoryArena &arena, const Shape *shape,
+                const Light &light, Point2f &uLight,
+                const std::shared_ptr<DitherMask> &ditherMask = nullptr) const {
+        // Empty definition
+        return Spectrum(0);
+    }
+    virtual Spectrum SampleDistDir(const Scene &scene, const Ray &ray,
+                Sampler &sampler, MemoryArena &arena,
+                const Distribution1D *lightDistrib, const Shape *shape,
+                const std::shared_ptr<DitherMask> &ditherMask = nullptr) const {
+        // Empty definition
+        return Spectrum(0);
+    }
 };
 
 // HenyeyGreenstein Declarations
