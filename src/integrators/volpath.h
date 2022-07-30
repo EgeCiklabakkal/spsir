@@ -41,9 +41,14 @@
 // integrators/volpath.h*
 #include "pbrt.h"
 #include "integrator.h"
+#include "scene.h"
 #include "lightdistrib.h"
+#include "dithermask.h"
 
 namespace pbrt {
+
+// Strategy used in radiance calculation
+enum class VolPathLiStrategy { Default, LightDriven, DistDir };
 
 // VolPathIntegrator Declarations
 class VolPathIntegrator : public SamplerIntegrator {
@@ -52,21 +57,35 @@ class VolPathIntegrator : public SamplerIntegrator {
     VolPathIntegrator(int maxDepth, std::shared_ptr<const Camera> camera,
                       std::shared_ptr<Sampler> sampler,
                       const Bounds2i &pixelBounds, Float rrThreshold = 1,
-                      const std::string &lightSampleStrategy = "spatial")
+                      const std::string &lightSampleStrategy = "spatial",
+                      const VolPathLiStrategy &radianceStrategy =
+                        VolPathLiStrategy::Default,
+                      const std::shared_ptr<DitherMask> &ditherMask = nullptr)
         : SamplerIntegrator(camera, sampler, pixelBounds),
           maxDepth(maxDepth),
           rrThreshold(rrThreshold),
-          lightSampleStrategy(lightSampleStrategy) { }
+          lightSampleStrategy(lightSampleStrategy),
+          radianceStrategy(radianceStrategy),
+          ditherMask(ditherMask) { }
     void Preprocess(const Scene &scene, Sampler &sampler);
     Spectrum Li(const RayDifferential &ray, const Scene &scene,
                 Sampler &sampler, MemoryArena &arena, int depth) const;
 
   private:
+    Spectrum LiDefault(const RayDifferential &ray, const Scene &scene,
+                Sampler &sampler, MemoryArena &arena, int depth) const;
+    Spectrum LiLightDriven(const RayDifferential &ray, const Scene &scene,
+                Sampler &sampler, MemoryArena &arena, int depth) const;
+    Spectrum LiDistDir(const RayDifferential &ray, const Scene &scene,
+                Sampler &sampler, MemoryArena &arena, int depth) const;
+
     // VolPathIntegrator Private Data
     const int maxDepth;
     const Float rrThreshold;
     const std::string lightSampleStrategy;
-    std::unique_ptr<LightDistribution> lightDistribution;
+    const VolPathLiStrategy radianceStrategy;
+    std::shared_ptr<LightDistribution> lightDistribution;
+    const std::shared_ptr<DitherMask> ditherMask;
 };
 
 VolPathIntegrator *CreateVolPathIntegrator(

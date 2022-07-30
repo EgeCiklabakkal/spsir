@@ -38,8 +38,11 @@
 #include "camera.h"
 #include "film.h"
 #include "stats.h"
+#include "progressreporter.h"
 
 namespace pbrt {
+
+STAT_COUNTER("Integrator/Camera rays traced", nCameraRays);
 
 // DirectLightingIntegrator Method Definitions
 void DirectLightingIntegrator::Preprocess(const Scene &scene,
@@ -56,7 +59,10 @@ void DirectLightingIntegrator::Preprocess(const Scene &scene,
                 sampler.Request2DArray(nLightSamples[j]);
             }
         }
-    }
+    } 
+
+    lightDistribution =
+        CreateLightSampleDistribution(lightSampleStrategy, scene);
 }
 
 Spectrum DirectLightingIntegrator::Li(const RayDifferential &ray,
@@ -80,11 +86,70 @@ Spectrum DirectLightingIntegrator::Li(const RayDifferential &ray,
     L += isect.Le(wo);
     if (scene.lights.size() > 0) {
         // Compute direct lighting for _DirectLightingIntegrator_ integrator
-        if (strategy == LightStrategy::UniformSampleAll)
+        const Distribution1D *lightDistrib = 
+            lightDistribution->Lookup(isect.p);
+        if (strategy == LightStrategy::UniformSampleAll) {
             L += UniformSampleAllLights(isect, scene, arena, sampler,
                                         nLightSamples);
-        else
-            L += UniformSampleOneLight(isect, scene, arena, sampler);
+        } else if (strategy == LightStrategy::LightOnly) {
+            // Direct lighting with light sampling only
+            if (risStrategy == RISStrategy::Reservoir) {
+                L += ReservoirLightOnly(isect, scene, arena, sampler, M,
+                                        ditherMask, N, false, lightDistrib);
+            } else if (risStrategy == RISStrategy::InverseCDF) {
+                L += InverseCDFLightOnly(isect, scene, arena, sampler, M,
+                                         ditherMask, N, false, lightDistrib);
+            } else if (risStrategy == RISStrategy::BidirectionalCDF) {
+                Spectrum LNRIS(0.f);
+                Point2i currentPixel = sampler.GetCurrentPixel();
+
+                // Blue-noise offset for candidates (on the Hilbert Curve)
+                Float offset = ditherMask->Value(currentPixel, 0);
+
+                // Blue-noise offset for canonical input randoms
+                Float u = ditherMask->Value(currentPixel, 1);
+
+                for (int i = 0; i < N; ++i) {
+                    // Sample 1 out of M / N
+                    LNRIS += BidirectionalCDFLightOnly(
+                                isect, scene, arena, sampler,
+                                M, ditherMask, offset,
+                                std::fmod(RadicalInverse(0, i) + u, 1.0),
+                                N, i, false, lightDistrib);
+                }
+                L += LNRIS / Float(N);
+            } 
+        } else if (strategy == LightStrategy::BSDFEnvMIS) {
+            // Direct lighting with MIS inside Env. map
+            if (risStrategy == RISStrategy::Reservoir) {
+                L += ReservoirBSDFEnvMIS(isect, scene, arena, sampler, M,
+                                        ditherMask, N, false, lightDistrib);
+            } else if (risStrategy == RISStrategy::InverseCDF) {
+                L += InverseCDFBSDFEnvMIS(isect, scene, arena, sampler, M,
+                                        ditherMask, N, false, lightDistrib);
+            } else if (risStrategy == RISStrategy::BidirectionalCDF) {
+                // Sample 1 out of M / N
+                Spectrum LNRIS(0.f);
+                Point2i currentPixel = sampler.GetCurrentPixel();
+
+                // Blue-noise offset for candidates (on the Hilbert Curve)
+                Float offset = ditherMask->Value(currentPixel, 0);
+
+                // Blue-noise offset for canonical input randoms
+                Float u = ditherMask->Value(currentPixel, 1);
+                for (int i = 0; i < N; ++i) {
+                    // Sample 1 out of M / N
+                    LNRIS += BidirectionalBSDFEnvMIS(
+                                isect, scene, arena, sampler,
+                                M, ditherMask, offset,
+                                std::fmod(RadicalInverse(0, i) + u, 1.0),
+                                N, i, false, lightDistrib);
+                }
+                L += LNRIS / Float(N);
+            } 
+        } else
+            L += UniformSampleOneLight(isect, scene,
+                    arena, sampler, false, lightDistrib);
     }
     if (depth + 1 < maxDepth) {
         // Trace rays for specular reflection and refraction
@@ -98,12 +163,23 @@ DirectLightingIntegrator *CreateDirectLightingIntegrator(
     const ParamSet &params, std::shared_ptr<Sampler> sampler,
     std::shared_ptr<const Camera> camera) {
     int maxDepth = params.FindOneInt("maxdepth", 5);
-    LightStrategy strategy;
+    int M = params.FindOneInt("M", 32);
+    int N = params.FindOneInt("N", 1);
+    std::string maskpath = params.FindOneString("mask", "mask.mask");
+    int maskOffsetSeed = params.FindOneInt("maskoffsetseed", 0);
     std::string st = params.FindOneString("strategy", "all");
+    std::string risst = params.FindOneString("risstrategy", "reservoirsampling");
+    std::string lst = params.FindOneString("lightsamplestrategy", "power");
+
+    LightStrategy strategy;
     if (st == "one")
         strategy = LightStrategy::UniformSampleOne;
     else if (st == "all")
         strategy = LightStrategy::UniformSampleAll;
+    else if (st == "lightonly")
+        strategy = LightStrategy::LightOnly;
+    else if (st == "bsdfenvmis")
+        strategy = LightStrategy::BSDFEnvMIS;
     else {
         Warning(
             "Strategy \"%s\" for direct lighting unknown. "
@@ -111,6 +187,22 @@ DirectLightingIntegrator *CreateDirectLightingIntegrator(
             st.c_str());
         strategy = LightStrategy::UniformSampleAll;
     }
+
+    RISStrategy risStrategy;
+    if (risst == "reservoir")
+        risStrategy = RISStrategy::Reservoir;
+    else if (risst == "inversecdf")
+        risStrategy = RISStrategy::InverseCDF;
+    else if (risst == "bidirectional")
+        risStrategy = RISStrategy::BidirectionalCDF;
+    else {
+        Warning(
+            "Strategy \"%s\" for RIS unknown. "
+            "Using \"reservoir\".",
+            risst.c_str());
+        risStrategy = RISStrategy::Reservoir;
+    }
+
     int np;
     const int *pb = params.FindInt("pixelbounds", &np);
     Bounds2i pixelBounds = camera->film->GetSampleBounds();
@@ -125,8 +217,18 @@ DirectLightingIntegrator *CreateDirectLightingIntegrator(
                 Error("Degenerate \"pixelbounds\" specified.");
         }
     }
+
+    // Read dither mask, default is file "mask.mask"
+    std::shared_ptr<DitherMask> ditherMask =
+        std::make_shared<DitherMask>(AbsolutePath(ResolveFilename(maskpath)));
+
+    // mask offset
+    Point2f maskOffsetU = R2Sample(maskOffsetSeed);
+    ditherMask->SetOffset(maskOffsetU);
+
     return new DirectLightingIntegrator(strategy, maxDepth, camera, sampler,
-                                        pixelBounds);
+                                        pixelBounds, M, N, risStrategy,
+                                        ditherMask, lst);
 }
 
 }  // namespace pbrt

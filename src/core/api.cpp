@@ -114,6 +114,7 @@
 #include "textures/wrinkled.h"
 #include "media/grid.h"
 #include "media/homogeneous.h"
+#include "media/homogeneousblocking.h"
 
 #include <map>
 #include <stdio.h>
@@ -694,9 +695,24 @@ std::shared_ptr<Medium> MakeMedium(const std::string &name,
     Float g = paramSet.FindOneFloat("g", 0.0f);
     sig_a = paramSet.FindOneSpectrum("sigma_a", sig_a) * scale;
     sig_s = paramSet.FindOneSpectrum("sigma_s", sig_s) * scale;
+    int M = paramSet.FindOneInt("M", 32);
+    int N = paramSet.FindOneInt("N", 1);
     Medium *m = NULL;
+    VolSampleStrategy sampleStrategy;
+    std::string samplest = paramSet.FindOneString("samplestrategy", "transmittance");
+    if (samplest == "risreservoir") {
+        sampleStrategy = VolSampleStrategy::RISReservoir;
+    } else if (samplest == "risbidirectional") {
+        sampleStrategy = VolSampleStrategy::RISBidirectionalCDF;
+    } else if (samplest == "risinversecdf") {
+        sampleStrategy = VolSampleStrategy::RISInverseCDF;
+    } else {
+        sampleStrategy = VolSampleStrategy::Transmittance;
+    }
     if (name == "homogeneous") {
         m = new HomogeneousMedium(sig_a, sig_s, g);
+    } else if (name == "homogeneousblocking") {
+        m = new HomogeneousBlockingMedium(sig_a, sig_s, g, M, N, sampleStrategy);
     } else if (name == "heterogeneous") {
         int nitems;
         const Float *data = paramSet.FindFloat("density", &nitems);

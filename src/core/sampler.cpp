@@ -51,6 +51,15 @@ CameraSample Sampler::GetCameraSample(const Point2i &pRaster) {
     return cs;
 }
 
+CameraSample Sampler::GetCameraSampleSimple(const Point2i &pRaster, bool pixelcenter) {
+    CameraSample cs;
+    if (pixelcenter)
+        cs.pFilm = (Point2f)pRaster + Point2f(0.5, 0.5);
+    else
+        cs.pFilm = (Point2f)pRaster + Get2D();
+    return cs;
+}
+
 void Sampler::StartPixel(const Point2i &p) {
     currentPixel = p;
     currentPixelSampleIndex = 0;
@@ -192,6 +201,16 @@ Point2f GlobalSampler::Get2D() {
               SampleDimension(intervalSampleIndex, dimension + 1));
     dimension += 2;
     return p;
+}
+
+// R2 sequence from
+// http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
+Point2f R2Sample(int n, Float seed) {
+    Float a1(0.7548776662466927);
+    Float a2(0.5698402909980532);
+
+    return Point2f(std::fmod(seed + a1 * (n + 1), 1.0),
+                   std::fmod(seed + a2 * (n + 1), 1.0));
 }
 
 }  // namespace pbrt

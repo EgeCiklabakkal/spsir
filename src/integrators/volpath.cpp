@@ -39,8 +39,14 @@
 #include "paramset.h"
 #include "scene.h"
 #include "stats.h"
+#include "progressreporter.h"
+#include "samplers/sobol.h"
+#include "samplers/halton.h"
+#include "samplers/random.h"
 
 namespace pbrt {
+
+STAT_COUNTER("Integrator/Camera rays traced", nCameraRays);
 
 STAT_INT_DISTRIBUTION("Integrator/Path length", pathLength);
 STAT_COUNTER("Integrator/Volume interactions", volumeInteractions);
@@ -53,6 +59,18 @@ void VolPathIntegrator::Preprocess(const Scene &scene, Sampler &sampler) {
 }
 
 Spectrum VolPathIntegrator::Li(const RayDifferential &r, const Scene &scene,
+                               Sampler &sampler, MemoryArena &arena,
+                               int depth) const {
+    if (radianceStrategy == VolPathLiStrategy::LightDriven) {
+        return LiLightDriven(r, scene, sampler, arena, depth);
+    } else if (radianceStrategy == VolPathLiStrategy::DistDir) {
+        return LiDistDir(r, scene, sampler, arena, depth);
+    } else {
+        return LiDefault(r, scene, sampler, arena, depth);
+    }
+}
+
+Spectrum VolPathIntegrator::LiDefault(const RayDifferential &r, const Scene &scene,
                                Sampler &sampler, MemoryArena &arena,
                                int depth) const {
     ProfilePhase p(Prof::SamplerIntegratorLi);
@@ -188,12 +206,82 @@ Spectrum VolPathIntegrator::Li(const RayDifferential &r, const Scene &scene,
     return L;
 }
 
+Spectrum VolPathIntegrator::LiLightDriven(const RayDifferential &r, const Scene &scene,
+                               Sampler &sampler, MemoryArena &arena,
+                               int depth) const {
+    ProfilePhase p(Prof::SamplerIntegratorLi);
+    Spectrum L(0.f);
+    RayDifferential ray(r);
+    int nLights = int(scene.lights.size());
+
+    { // Limited to one bounce
+        // Intersect _ray_ with scene and store intersection in _isect_
+        SurfaceInteraction isect;
+        bool foundIntersection = scene.Intersect(ray, &isect);
+
+        // Sample the participating medium, if present
+        Point2f uLight;
+        Float lightChoicePdf;
+        int lightNum;
+        if (ray.medium) {
+            ++volumeInteractions;
+            const Distribution1D *lightDistrib =
+                lightDistribution->Lookup(Point3f()); // Can't use spatial!
+            Float uRemapped;
+            // Pick a light
+            if (nLights > 1) {
+                lightNum = ChooseLight(sampler.Get1D(), lightChoicePdf,
+                    nLights, lightDistrib, &uRemapped);
+            } else {
+                lightNum = 0; // No random decision
+                lightChoicePdf = 1;
+            }
+            const std::shared_ptr<Light> &light = scene.lights[lightNum];
+            
+            L = ray.medium->SampleLightDriven(scene, ray, sampler,
+                                                arena, isect.shape,
+                                                *light, uLight, ditherMask);
+        }
+    }
+
+    return L;
+}
+
+Spectrum VolPathIntegrator::LiDistDir(const RayDifferential &r,
+                                        const Scene &scene, Sampler &sampler,
+                                        MemoryArena &arena, int depth) const {
+    ProfilePhase p(Prof::SamplerIntegratorLi);
+    Spectrum L(0.f);
+    RayDifferential ray(r);
+
+    { // Limited to one bounce
+        // Intersect _ray_ with scene and store intersection in _isect_
+        SurfaceInteraction isect;
+        bool foundIntersection = scene.Intersect(ray, &isect);
+
+        // Sample the participating medium, if present
+        if (ray.medium) {
+            ++volumeInteractions;
+            const Distribution1D *lightDistrib =
+                lightDistribution->Lookup(Point3f()); // Can't use spatial!
+            
+            L = ray.medium->SampleDistDir(scene, ray, sampler, arena,
+                                            lightDistrib, isect.shape,
+                                            ditherMask);
+        }
+    }
+
+    return L;
+}
+
 VolPathIntegrator *CreateVolPathIntegrator(
     const ParamSet &params, std::shared_ptr<Sampler> sampler,
     std::shared_ptr<const Camera> camera) {
     int maxDepth = params.FindOneInt("maxdepth", 5);
     int np;
     const int *pb = params.FindInt("pixelbounds", &np);
+    std::string maskpath = params.FindOneString("mask", "mask.mask");
+    int maskOffsetSeed = params.FindOneInt("maskoffsetseed", 0);
     Bounds2i pixelBounds = camera->film->GetSampleBounds();
     if (pb) {
         if (np != 4)
@@ -207,10 +295,31 @@ VolPathIntegrator *CreateVolPathIntegrator(
         }
     }
     Float rrThreshold = params.FindOneFloat("rrthreshold", 1.);
+
+    std::string radiancest = params.FindOneString("listrategy", "default");
+    VolPathLiStrategy radianceStrategy;
+    if (radiancest == "lightdriven") {
+        radianceStrategy = VolPathLiStrategy::LightDriven;
+    } else if (radiancest == "distdir") {
+        radianceStrategy = VolPathLiStrategy::DistDir;
+    } else {
+        radianceStrategy = VolPathLiStrategy::Default;
+    }
+
     std::string lightStrategy =
         params.FindOneString("lightsamplestrategy", "spatial");
+
+    std::shared_ptr<DitherMask> ditherMask =
+        std::make_shared<DitherMask>(AbsolutePath(ResolveFilename(maskpath)));
+
+    // mask offset
+    Point2f maskOffsetU = R2Sample(maskOffsetSeed);
+    ditherMask->SetOffset(maskOffsetU);
+
     return new VolPathIntegrator(maxDepth, camera, sampler, pixelBounds,
-                                 rrThreshold, lightStrategy);
+                                 rrThreshold, lightStrategy,
+                                 radianceStrategy,
+                                 ditherMask);
 }
 
 }  // namespace pbrt

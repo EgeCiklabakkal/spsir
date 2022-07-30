@@ -56,6 +56,12 @@ Light::Light(int flags, const Transform &LightToWorld,
 
 Light::~Light() {}
 
+Spectrum Light::Sample_Li_Area(const Interaction &ref, const Point2f &u,
+                           Vector3f *wi, Float *pdf,
+                           VisibilityTester *vis, Interaction *pShape) const {
+    return Spectrum(0.f);
+}
+
 bool VisibilityTester::Unoccluded(const Scene &scene) const {
     return !scene.IntersectP(p0.SpawnRayTo(p1));
 }
