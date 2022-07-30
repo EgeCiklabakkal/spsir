@@ -16,6 +16,18 @@ The project can be built in [the same way as pbrt](https://github.com/mmp/pbrt-v
 For further details, we refer to the
 [project webpage](http://iliyan.com/publications/StratifiedResampling).
 
+Building Spsir
+--------------
+Built [the same way as pbrt](https://github.com/mmp/pbrt-v3/blob/master/README.md).
+```bash
+$ git clone --recursive git@github.com:EgeCiklabakkal/spsir.git
+$ cd spsir
+$ mkdir build
+$ cd build
+$ cmake ..
+$ make -j8
+```
+
 Scenes
 ------
 We include the scenes used to generate the renderings in the paper.
