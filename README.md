@@ -139,7 +139,7 @@ The relevant method is `SampleLightDriven(...)`
 For the second experiment, our goal is to sample distance along the ray and
 a direction to some (area) light so that our candidates are 3D.
 The relevant method is `SampleDistDir(...)` which calls
-`SampleRIS[Reservoir,iCDF,Bidirectional]DistDir(...)`.
+`SampleRIS[Reservoir,Bidirectional]DistDir(...)`.
 
 How to cite
 -----------
